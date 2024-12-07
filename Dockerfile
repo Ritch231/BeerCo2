@@ -4,7 +4,10 @@ FROM python:3.9-slim
 # 设置工作目录
 WORKDIR /app
 
-# 复制当前文件夹的内容到容器中
+# 复制模型文件到工作目录
+COPY pressure_model.pkl poly_transformer.pkl /app/
+
+# 复制当前文件夹的所有内容到容器中
 COPY . .
 
 # 安装依赖
