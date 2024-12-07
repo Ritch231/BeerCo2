@@ -30,7 +30,7 @@
             const temperature = document.getElementById('temperature').value;
             const co2Concentration = document.getElementById('co2_concentration').value;
 
-            const response = await fetch('http://localhost:5000/predict', {
+            const response = await fetch('http://localhost:606/predict', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

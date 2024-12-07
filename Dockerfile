@@ -10,8 +10,8 @@ COPY . .
 # 安装依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 暴露端口 5000
-EXPOSE 5000
+# 暴露端口 606
+EXPOSE 606
 
 # 启动 Flask 应用
 CMD ["python", "app.py"]
