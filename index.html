@@ -3,52 +3,283 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Beer CO2 Pressure Prediction</title>
+    <style>
+        input,
+        button {
+            font-size: 16px;
+        }
+
+        button {
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            padding: 5px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 4px 2px;
+            border-radius: 5px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .clear-button {
+            background-color: #ffa500;
+            color: white;
+            border: none;
+            padding: 5px 20px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+            border-radius: 5px;
+        }
+
+        .clear-button:hover {
+            background-color: #ff8c00;
+        }
+
+        #clear-button-container {
+            text-align: right;
+            margin-top: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #ddd;
+        }
+
+        th,
+        td {
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .record {
+            margin-bottom: 10px;
+            padding: 5px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+        }
+    </style>
 </head>
 
 <body>
-    <h1>Beer CO2 Pressure Prediction</h1>
+    <h2>CO2压力推算</h2>
 
     <form id="prediction-form">
-        <label for="temperature">Temperature (°C):</label>
-        <input type="number" id="temperature" required><br>
+        <label for="tank_number">清酒罐号:</label>
+        <input type="text" id="tank_number" required><br><br>
 
-        <label for="co2_concentration">CO2 Concentration:</label>
+        <label for="temperature">温度 (°C):</label>
+        <input type="number" id="temperature" step="any" required><br><br>
+
+        <label for="co2_concentration">CO2浓度:</label>
         <input type="number" step="0.001" id="co2_concentration" required><br><br>
 
-        <button type="submit">Submit</button>
+        <div id="result"></div> <!-- 显示预测结果的位置 -->
+        <button type="submit">提交</button>
     </form>
 
-    <h2>Predicted Pressure:</h2>
-    <p id="result"></p>
+    <label for="current_display">表显压力 (bar):</label>
+    <input type="number" step="0.001" id="current_display" required><br><br>
+
+    <label for="tank_pressure">罐内压力 (bar):</label>
+    <input type="number" step="0.001" id="tank_pressure" required><br><br>
+
+    <button id="calculate-button">计算</button>
+
+    <p id="calculated-result"></p>
+
+    <p id="error-message" style="color: red;"></p>
+
+    <p id="duplicate-message" style="color: red; display: none;"></p>
+
+    <div id="clear-button-container">
+        <button class="clear-button" id="clear-button">清空</button>
+    </div>
+
+    <table id="record-table">
+        <thead>
+            <tr>
+                <th>罐号</th>
+                <th>温度 (°C)</th>
+                <th>CO2浓度</th>
+                <th>预测压力 (bar)</th>
+                <th>表显压力 (bar)</th>
+                <th>罐内压力 (bar)</th>
+                <th>计算后压力 (bar)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- 记录将会被动态添加到这里 -->
+        </tbody>
+    </table>
 
     <script>
+        let predictedPressure = null;
+        let records = JSON.parse(localStorage.getItem('records')) || []; // 从LocalStorage加载记录
+        let calculatedPressure = null;
+
         document.getElementById('prediction-form').addEventListener('submit', async function (e) {
             e.preventDefault();
 
             const temperature = document.getElementById('temperature').value;
             const co2Concentration = document.getElementById('co2_concentration').value;
 
-            const response = await fetch('http://localhost:606/predict', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    temperature: parseFloat(temperature),
-                    co2_concentration: parseFloat(co2Concentration)
-                })
-            });
+            if (isNaN(temperature) || isNaN(co2Concentration) || temperature === '' || co2Concentration === '') {
+                document.getElementById('error-message').innerText = '请输入有效的温度和CO2浓度值。';
+                document.getElementById('result').innerText = '';
+                return;
+            }
 
-            const data = await response.json();
+            document.getElementById('error-message').innerText = '';
 
-            if (data.predicted_pressure) {
-                document.getElementById('result').innerText = `Pressure: ${data.predicted_pressure.toFixed(3)} bar`;
-            } else {
-                document.getElementById('result').innerText = `Error: ${data.error}`;
+            // 显示“请稍候...”提示
+            document.getElementById('result').innerText = '请稍候...';
+
+            try {
+                const response = await fetch('https://xj.evannas.top:446/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        temperature: parseFloat(temperature),
+                        co2_concentration: parseFloat(co2Concentration)
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('请求失败，服务器返回状态 ' + response.status);
+                }
+
+                const data = await response.json();
+
+                if (data.predicted_pressure) {
+                    predictedPressure = data.predicted_pressure;
+                    document.getElementById('result').innerText = `预测压力: ${predictedPressure.toFixed(3)} bar`;
+                } else {
+                    document.getElementById('result').innerText = '';
+                    document.getElementById('error-message').innerText = `错误: ${data.error || '未知错误'}`;
+                }
+            } catch (error) {
+                document.getElementById('result').innerText = '';
+                document.getElementById('error-message').innerText = `错误: ${error.message}`;
             }
         });
+
+        document.getElementById('calculate-button').addEventListener('click', function () {
+            const currentDisplay = parseFloat(document.getElementById('current_display').value);
+            const tankPressure = parseFloat(document.getElementById('tank_pressure').value);
+
+            if (isNaN(currentDisplay) || isNaN(tankPressure)) {
+                document.getElementById('calculated-result').innerText = '请输入有效的表显压力和罐内压力值。';
+                updateDuplicateMessage(''); // 清空重复记录提示
+                return;
+            }
+
+            if (predictedPressure !== null) {
+                calculatedPressure = (predictedPressure - currentDisplay + tankPressure).toFixed(3);
+                document.getElementById('calculated-result').innerText = `预计充压到: ${calculatedPressure} bar`;
+
+                const isDuplicate = records.some(record =>
+                    record.tank_number === document.getElementById('tank_number').value &&
+                    record.temperature === document.getElementById('temperature').value &&
+                    record.co2_concentration === document.getElementById('co2_concentration').value &&
+                    record.predicted_pressure === predictedPressure.toFixed(3) &&
+                    record.current_display === currentDisplay &&
+                    record.tank_pressure === tankPressure &&
+                    record.calculated_pressure === calculatedPressure
+                );
+
+                if (isDuplicate) {
+                    updateDuplicateMessage('记录已存在，未添加重复记录。');
+                } else {
+                    const record = {
+                        tank_number: document.getElementById('tank_number').value,
+                        temperature: document.getElementById('temperature').value,
+                        co2_concentration: document.getElementById('co2_concentration').value,
+                        predicted_pressure: predictedPressure.toFixed(3),
+                        current_display: currentDisplay,
+                        tank_pressure: tankPressure,
+                        calculated_pressure: calculatedPressure
+                    };
+
+                    records.unshift(record);
+                    updateRecordTable();
+                    updateDuplicateMessage(''); // 清空重复记录提示
+                    localStorage.setItem('records', JSON.stringify(records)); // 保存到LocalStorage
+                }
+            } else {
+                document.getElementById('calculated-result').innerText = '请先提交表单以获取预测的压力值。';
+                updateDuplicateMessage(''); // 清空重复记录提示
+            }
+        });
+
+        function updateRecordTable() {
+            const tableBody = document.getElementById('record-table').getElementsByTagName('tbody')[0];
+            tableBody.innerHTML = '';
+
+            records.forEach((record, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${record.tank_number}</td>
+                    <td>${record.temperature}</td>
+                    <td>${record.co2_concentration}</td>
+                    <td>${record.predicted_pressure}</td>
+                    <td>${record.current_display}</td>
+                    <td>${record.tank_pressure}</td>
+                    <td>${record.calculated_pressure}</td>
+                `;
+                row.addEventListener('click', () => {
+                    document.getElementById('tank_number').value = record.tank_number;
+                    document.getElementById('temperature').value = record.temperature;
+                    document.getElementById('co2_concentration').value = record.co2_concentration;
+                    document.getElementById('current_display').value = record.current_display;
+                    document.getElementById('tank_pressure').value = record.tank_pressure;
+                    document.getElementById('calculated-result').innerText = `预计充压到: ${record.calculated_pressure} bar`;
+                    document.getElementById('result').innerText = `预测压力: ${record.predicted_pressure} bar`;
+                });
+                tableBody.appendChild(row);
+            });
+        }
+
+        function updateDuplicateMessage(message) {
+            const duplicateMessageElement = document.getElementById('duplicate-message');
+            if (message) {
+                duplicateMessageElement.innerText = message;
+                duplicateMessageElement.style.display = 'block';
+            } else {
+                duplicateMessageElement.style.display = 'none';
+            }
+        }
+
+        document.getElementById('clear-button').addEventListener('click', () => {
+            records.length = 0;
+            updateRecordTable();
+            updateDuplicateMessage(''); // 清空重复记录提示
+            localStorage.removeItem('records'); // 清除LocalStorage中的记录
+        });
+
+        // 在页面加载时更新表格
+        window.onload = updateRecordTable;
     </script>
 </body>
 
