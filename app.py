@@ -6,7 +6,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 
 app = Flask(__name__)
-CORS(app)  # 启用 CORS，允许跨域请求
+CORS(app)
 
 # 数据定义：温度、压力、CO2值
 data = {
@@ -25,7 +25,7 @@ data = {
 # 创建 DataFrame
 df = pd.DataFrame(data)
 
-# 特征处理：温度和压力为输入特征，CO2为目标值
+# 特征处理
 X = df[["温度", "压力"]]
 y = df["CO2值"]
 
@@ -37,30 +37,25 @@ X_poly = poly.fit_transform(X)
 model = LinearRegression()
 model.fit(X_poly, y)
 
-# 构造网格化温度和压力
-温度范围 = np.arange(-5.0, 12.7, 0.1)  # 从-5.0递增到12.7，步长0.1
-压力范围 = np.arange(0.05, 1.51, 0.01)  # 从0.05递增到1.51，步长0.01
-
-# 创建网格数据
+# 创建网格
+温度范围 = np.arange(-5.0, 12.7, 0.1)
+压力范围 = np.arange(0.05, 1.51, 0.01)
 grid_温度, grid_压力 = np.meshgrid(温度范围, 压力范围)
 grid_input = np.c_[grid_温度.ravel(), grid_压力.ravel()]
 grid_poly = poly.transform(grid_input)
-
-# 预测 CO2 值
 predicted_CO2 = model.predict(grid_poly).reshape(grid_压力.shape)
 
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    # 获取请求数据
+@app.route('/predict_pressure', methods=['POST'])
+def predict_pressure():
+    """提交温度和 CO2 浓度返回压力"""
     data = request.get_json()
     temperature = data.get('temperature')
     co2_concentration = data.get('co2_concentration')
 
     if temperature is None or co2_concentration is None:
-        return jsonify({'error': 'Temperature and CO2 concentration are required'}), 400
+        return jsonify({'error': '温度和 CO2 浓度是必需的'}), 400
 
-    # 在网格中查找最接近的 CO2 值
     min_distance = float('inf')
     predicted_pressure = None
 
@@ -69,18 +64,44 @@ def predict():
             grid_temperature = grid_温度[i, j]
             grid_pressure = grid_压力[i, j]
             grid_co2 = predicted_CO2[i, j]
-
-            # 计算温度和 CO2 值的差距
             distance = np.sqrt((grid_temperature - temperature) ** 2 + (grid_co2 - co2_concentration) ** 2)
-
             if distance < min_distance:
                 min_distance = distance
                 predicted_pressure = grid_pressure
 
     if predicted_pressure is not None:
-        return jsonify({'predicted_pressure': round(predicted_pressure, 3)})  # 返回的压力值保留小数点后3位
+        return jsonify({'predicted_pressure': round(predicted_pressure, 3)})
     else:
-        return jsonify({'error': 'Could not calculate pressure for the given values'}), 500
+        return jsonify({'error': '无法计算给定值的压力'}), 500
+
+
+@app.route('/predict_temperature', methods=['POST'])
+def predict_temperature():
+    """提交压力和 CO2 浓度返回温度"""
+    data = request.get_json()
+    pressure = data.get('pressure')
+    co2_concentration = data.get('co2_concentration')
+
+    if pressure is None or co2_concentration is None:
+        return jsonify({'error': '压力和 CO2 浓度是必需的'}), 400
+
+    min_distance = float('inf')
+    predicted_temperature = None
+
+    for i in range(grid_压力.shape[0]):
+        for j in range(grid_压力.shape[1]):
+            grid_temperature = grid_温度[i, j]
+            grid_pressure = grid_压力[i, j]
+            grid_co2 = predicted_CO2[i, j]
+            distance = np.sqrt((grid_pressure - pressure) ** 2 + (grid_co2 - co2_concentration) ** 2)
+            if distance < min_distance:
+                min_distance = distance
+                predicted_temperature = grid_temperature
+
+    if predicted_temperature is not None:
+        return jsonify({'predicted_temperature': round(predicted_temperature, 3)})
+    else:
+        return jsonify({'error': '无法计算给定值的温度'}), 500
 
 
 if __name__ == '__main__':
